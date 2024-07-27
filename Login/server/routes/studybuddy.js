@@ -38,9 +38,8 @@ router.post('/', async (req, res) => {
     // Find users with similar modules
     const allModules = await Module.find({}).exec();
 
-    let bestMatch = null;
     let highestScore = 0;
-    let commonModules = [];
+    let bestMatches = [];
 
     for (const moduleEntry of allModules) {
       if (moduleEntry.userId.toString() !== userId.toString()) { // Ensure userId is compared correctly
@@ -48,16 +47,21 @@ router.post('/', async (req, res) => {
 
         if (score > highestScore) {
           highestScore = score;
-          bestMatch = moduleEntry;
-          commonModules = common;
+          bestMatches = [{ moduleEntry, common }]; // Start a new list of best matches
+        } else if (score === highestScore) {
+          bestMatches.push({ moduleEntry, common }); // Add to the existing list of best matches
         }
       }
     }
 
-    // If a best match is found, retrieve additional information
-    if (bestMatch) {
-      const matchedUser = await collection.findOne({ userId: bestMatch.userId }).exec();
-      const matchedStudent = await Student.findOne({ _id: bestMatch.userId }).select('nickname').exec(); // Fetch the nickname
+    // If any best matches are found, select one at random
+    if (bestMatches.length > 0) {
+      const randomIndex = Math.floor(Math.random() * bestMatches.length);
+      const bestMatch = bestMatches[randomIndex];
+
+      // Retrieve additional information
+      const matchedUser = await collection.findOne({ userId: bestMatch.moduleEntry.userId }).exec();
+      const matchedStudent = await Student.findOne({ _id: bestMatch.moduleEntry.userId }).select('nickname').exec(); // Fetch the nickname
 
       if (matchedUser && matchedStudent) {
         res.json({
@@ -68,7 +72,7 @@ router.post('/', async (req, res) => {
             yearOfStudy: matchedUser.year,
             nickname: matchedStudent.nickname // Include nickname in the match object
           },
-          commonModules // Send the common modules
+          commonModules: bestMatch.common // Send the common modules
         });
       } else {
         res.json({ match: null });
